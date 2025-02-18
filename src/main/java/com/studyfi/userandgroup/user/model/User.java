@@ -4,6 +4,7 @@ import com.studyfi.userandgroup.group.model.Group;
 import jakarta.persistence.*;
 import lombok.Data;
 
+import java.util.Date;
 import java.util.List;
 
 @Data
@@ -29,6 +30,13 @@ public class User {
     private String aboutMe;
 
     private String currentAddress;
+
+    @Column(name = "reset_token")
+    private String resetToken;
+
+    // for storing the expiration time of the reset token
+    @Column(name = "reset_token_expiry")
+    private Date resetTokenExpiry;  // The expiration time of the reset token
 
     @ManyToMany
     @JoinTable(
@@ -116,5 +124,17 @@ public class User {
 
     public void setGroups(List<Group> groups) {
         this.groups = groups;
+    }
+
+    public void setResetToken(String resetToken) {
+        this.resetToken = resetToken;
+    }
+
+    public void setResetTokenExpiry(Date resetTokenExpiry) {
+        this.resetTokenExpiry = resetTokenExpiry;
+    }
+
+    public Date getResetTokenExpiry() {
+        return resetTokenExpiry;
     }
 }
