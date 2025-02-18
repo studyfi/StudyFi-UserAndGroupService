@@ -1,16 +1,22 @@
 package com.studyfi.userandgroup.user.service;
 
 import com.studyfi.userandgroup.group.model.Group;
+import com.studyfi.userandgroup.user.dto.PasswordResetDTO;
 import com.studyfi.userandgroup.user.dto.UserDTO;
 import com.studyfi.userandgroup.user.model.User;
 import com.studyfi.userandgroup.user.repo.UserRepo;
 import com.studyfi.userandgroup.group.repo.GroupRepo;
 import org.modelmapper.ModelMapper;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 @Service
 public class UserService {
@@ -27,6 +33,12 @@ public class UserService {
         this.modelMapper = modelMapper;
         this.passwordEncoder = passwordEncoder;
     }
+
+    @Value("${app.reset-password-url}")  // Using an external property for the base URL
+    private String resetPasswordUrl;
+
+    @Autowired
+    private JavaMailSender mailSender; // autowired JavaMailSender
 
     // Register a new user
     public UserDTO registerUser(UserDTO userDTO) {
@@ -50,6 +62,68 @@ public class UserService {
     public UserDTO getUserById(Integer userId) {
         User user = userRepo.findById(userId).orElseThrow(() -> new RuntimeException("User not found"));
         return modelMapper.map(user, UserDTO.class);
+    }
+
+    // The method to send reset link email with token and expiration time
+    public void sendPasswordResetLink(String email) {
+        // Generate a random token for password reset
+        String resetToken = UUID.randomUUID().toString();
+
+        // Set the expiration time for the token (e.g., 1 hour from now)
+        Date expiryDate = new Date(System.currentTimeMillis() + 3600 * 1000);  // 1 hour expiry time
+
+        // Save this reset token and expiration time in the database for the user
+        User user = userRepo.findByEmail(email);
+        if (user == null) {
+            throw new RuntimeException("User not found");
+        }
+        user.setResetToken(resetToken);
+        user.setResetTokenExpiry(expiryDate);  // Save the expiration time
+        userRepo.save(user);  // Save the user with the reset token and expiry time
+
+        // Create the complete URL for password reset with the real domain
+        String resetLink = resetPasswordUrl + "?token=" + resetToken;
+
+        // Prepare the email message
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(email);
+        message.setSubject("Password Reset Request");
+        message.setText("Click the following link to reset your password: " + resetLink);
+
+        // Send the email
+        try {
+            mailSender.send(message);
+            System.out.println("Password reset email sent to: " + email);
+        } catch (Exception ex) {
+            System.err.println("Error sending email: " + ex.getMessage());
+        }
+    }
+
+    // The method to reset the user's password using the reset token
+    public void resetPassword(String token, PasswordResetDTO passwordResetDTO) {
+        // Find the user by the reset token
+        User user = userRepo.findByResetToken(token);
+        if (user == null) {
+            throw new RuntimeException("Invalid reset token");
+        }
+
+        // Check if the token has expired
+        if (user.getResetTokenExpiry().before(new Date())) {
+            throw new RuntimeException("Reset token has expired");
+        }
+
+        // Validate the new password
+        validatePassword(passwordResetDTO.getNewPassword());
+
+        // Encrypt the new password before saving
+        user.setPassword(passwordEncoder.encode(passwordResetDTO.getNewPassword()));  // BCrypt encoding
+
+        // Clear the reset token and expiry after the password reset
+        user.setResetToken(null);
+        user.setResetTokenExpiry(null);
+
+        // Save the updated user
+        userRepo.save(user);
     }
 
     // Update user profile
@@ -87,6 +161,11 @@ public class UserService {
 
         userRepo.save(user);
         groupRepo.save(group);
+    }
+
+    private boolean isValidEmail(String email) {
+        String emailRegex = "^[A-Za-z0-9+_.-]+@(.+)$";  // Simple regex to validate email format
+        return email != null && email.matches(emailRegex);
     }
 
     // Password validation logic

@@ -1,5 +1,7 @@
 package com.studyfi.userandgroup.user.controller;
 
+import com.studyfi.userandgroup.user.dto.EmailRequestDTO;
+import com.studyfi.userandgroup.user.dto.PasswordResetDTO;
 import com.studyfi.userandgroup.user.dto.UserDTO;
 import com.studyfi.userandgroup.user.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -31,6 +33,20 @@ public class UserController {
     @GetMapping("/{userId}")
     public UserDTO getUserById(@PathVariable Integer userId) {
         return userService.getUserById(userId);
+    }
+
+    // Endpoint to trigger sending the password reset link
+    @PostMapping("/forgot-password")
+    public String sendPasswordResetEmail(@RequestBody EmailRequestDTO emailRequestDTO) {
+        userService.sendPasswordResetLink(emailRequestDTO.getEmail()); // Calls the service method
+        return "Password reset link sent to " + emailRequestDTO.getEmail();
+    }
+
+    // Endpoint to reset password
+    @PostMapping("/reset-password")
+    public String resetPassword(@RequestParam String token, @RequestBody PasswordResetDTO passwordResetDTO) {
+        userService.resetPassword(token, passwordResetDTO);
+        return "Password has been successfully reset.";
     }
 
     // Update user profile
